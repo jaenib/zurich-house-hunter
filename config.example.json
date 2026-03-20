@@ -1,0 +1,97 @@
+{
+  "runtime": {
+    "state_db_path": "data/state.sqlite3",
+    "timeout_seconds": 20,
+    "request_pause_seconds": 1.5,
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "bootstrap_mark_seen": true,
+    "max_notifications_per_run": 20,
+    "dry_run": false
+  },
+  "telegram": {
+    "bot_token": "${TELEGRAM_BOT_TOKEN:dry-run-token}",
+    "chat_id": "${TELEGRAM_CHAT_ID:0}",
+    "message_thread_id": "${TELEGRAM_THREAD_ID:}"
+  },
+  "sources": [
+    {
+      "name": "alle-immobilien-zuerich-houses",
+      "kind": "generic_link_cards",
+      "enabled": true,
+      "search_url": "https://www.alle-immobilien.ch/de/mieten/haus/kanton-zuerich?sort=dd",
+      "max_items": 25,
+      "fetch_details": false,
+      "same_domain_only": false,
+      "min_card_score": 2,
+      "min_rooms": 4,
+      "max_price_chf": 8000,
+      "must_contain_any": [
+        "haus",
+        "einfamilienhaus",
+        "doppeleinfamilienhaus",
+        "reihenhaus",
+        "bauernhaus",
+        "villa",
+        "chalet"
+      ],
+      "exclude_if_contains_any": [
+        "wg",
+        "untermiete",
+        "temporary",
+        "befristet",
+        "subrent"
+      ]
+    },
+    {
+      "name": "homegate-houses-zurich",
+      "kind": "homegate",
+      "enabled": false,
+      "search_url": "https://www.homegate.ch/rent/house/city-zurich/matching-list",
+      "max_items": 25,
+      "fetch_details": true,
+      "min_rooms": 4,
+      "max_price_chf": 8000,
+      "must_contain_any": [
+        "haus",
+        "einfamilienhaus",
+        "doppel-einfamilienhaus",
+        "villa",
+        "chalet",
+        "rustico"
+      ],
+      "exclude_if_contains_any": [
+        "wg",
+        "untermiete",
+        "temporary",
+        "befristet",
+        "subrent"
+      ]
+    },
+    {
+      "name": "immoscout24-houses-zurich",
+      "kind": "generic_link_cards",
+      "enabled": false,
+      "search_url": "https://www.immoscout24.ch/en/real-estate/rent/city-zurich",
+      "max_items": 25,
+      "fetch_details": true,
+      "same_domain_only": true,
+      "min_card_score": 2,
+      "min_rooms": 4,
+      "max_price_chf": 8000,
+      "must_contain_any": [
+        "house",
+        "villa",
+        "chalet",
+        "rustico",
+        "einfamilienhaus",
+        "doppel-einfamilienhaus"
+      ],
+      "exclude_if_contains_any": [
+        "temporary",
+        "shared flat",
+        "wg",
+        "subrent"
+      ]
+    }
+  ]
+}

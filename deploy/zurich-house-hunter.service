@@ -1,0 +1,15 @@
+[Unit]
+Description=Zurich House Hunter Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/bots/zurich-house-hunter
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bots/zurich-house-hunter/.venv/bin/python /usr/bots/zurich-house-hunter/hunter.py --config /usr/bots/zurich-house-hunter/config.json bot-loop --interval-seconds 900 --poll-timeout-seconds 20
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
