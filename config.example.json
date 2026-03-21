@@ -13,6 +13,14 @@
     "chat_id": "${TELEGRAM_CHAT_ID:0}",
     "message_thread_id": "${TELEGRAM_THREAD_ID:}"
   },
+  "mailbox": {
+    "host": "${IMAP_HOST:imap.example.com}",
+    "port": "${IMAP_PORT:993}",
+    "username": "${IMAP_USERNAME:alerts@example.com}",
+    "password": "${IMAP_PASSWORD:change-me}",
+    "mailbox": "${IMAP_MAILBOX:INBOX}",
+    "use_ssl": true
+  },
   "sources": [
     {
       "name": "alle-immobilien-zuerich-houses",
@@ -90,6 +98,113 @@
         "temporary",
         "shared flat",
         "wg",
+        "subrent"
+      ]
+    },
+    {
+      "name": "homegate-email-alerts",
+      "kind": "imap_link_alerts",
+      "enabled": false,
+      "search_url": "https://www.homegate.ch",
+      "fetch_details": false,
+      "email_from_contains_any": [
+        "homegate.ch"
+      ],
+      "email_subject_contains_any": [
+        "Suchabo",
+        "search alert"
+      ],
+      "email_link_domains": [
+        "homegate.ch"
+      ],
+      "exclude_url_regexes": [
+        "unsubscribe",
+        "abmelden"
+      ],
+      "email_max_messages": 25,
+      "min_rooms": 4,
+      "max_price_chf": 8000,
+      "must_contain_any": [
+        "haus",
+        "einfamilienhaus",
+        "villa",
+        "chalet"
+      ],
+      "exclude_if_contains_any": [
+        "wg",
+        "temporary",
+        "befristet",
+        "subrent"
+      ]
+    },
+    {
+      "name": "immoscout24-email-alerts",
+      "kind": "imap_link_alerts",
+      "enabled": false,
+      "search_url": "https://www.immoscout24.ch",
+      "fetch_details": false,
+      "email_from_contains_any": [
+        "immoscout24.ch"
+      ],
+      "email_subject_contains_any": [
+        "search alert",
+        "new matches",
+        "neue treffer"
+      ],
+      "email_link_domains": [
+        "immoscout24.ch"
+      ],
+      "exclude_url_regexes": [
+        "unsubscribe",
+        "abmelden"
+      ],
+      "email_max_messages": 25,
+      "min_rooms": 4,
+      "max_price_chf": 8000,
+      "must_contain_any": [
+        "house",
+        "haus",
+        "villa",
+        "chalet"
+      ],
+      "exclude_if_contains_any": [
+        "wg",
+        "temporary",
+        "subrent"
+      ]
+    },
+    {
+      "name": "newhome-email-alerts",
+      "kind": "imap_link_alerts",
+      "enabled": false,
+      "search_url": "https://www.newhome.ch",
+      "fetch_details": false,
+      "email_from_contains_any": [
+        "newhome.ch"
+      ],
+      "email_subject_contains_any": [
+        "Suchabo",
+        "newhome"
+      ],
+      "email_link_domains": [
+        "newhome.ch"
+      ],
+      "exclude_url_regexes": [
+        "unsubscribe",
+        "abmelden"
+      ],
+      "email_max_messages": 25,
+      "min_rooms": 4,
+      "max_price_chf": 8000,
+      "must_contain_any": [
+        "haus",
+        "house",
+        "villa",
+        "chalet"
+      ],
+      "exclude_if_contains_any": [
+        "wg",
+        "temporary",
         "subrent"
       ]
     }

@@ -7,6 +7,7 @@ from typing import List
 from .extractors import build_extractor
 from .filters import matches_filters
 from .http import HttpClient
+from .imap_alerts import ImapAlertClient, extract_email_alert_listings, message_matches_source
 from .logging_utils import log_event
 from .models import AppConfig, ChatFilters, Listing, SourceConfig, SourceRunStats
 from .state import GLOBAL_SCOPE_KEY, SeenListingStore
@@ -24,6 +25,7 @@ class HouseHunterService:
         )
         self._store = SeenListingStore(config.runtime.state_db_path)
         self._notifier = TelegramNotifier(self._http_client, config.telegram, dry_run=effective_dry_run)
+        self._imap_client = ImapAlertClient(config.mailbox) if config.mailbox is not None else None
         self._dry_run = effective_dry_run
 
     def close(self) -> None:
@@ -53,86 +55,24 @@ class HouseHunterService:
             source_stats = SourceRunStats(source_name=source.name)
             source_started_at = time.time()
             try:
-                log_event("scraper", "fetching source {0}".format(source.name))
-                page_html = self._http_client.get_text(source.search_url)
-                extractor = build_extractor(source.kind)
-                candidates = extractor.extract(source, page_html)
-                source_stats.fetched = len(candidates)
-                log_event("scraper", "source {0}: fetched {1} candidate links".format(source.name, source_stats.fetched))
-
-                filtered = []
-                for listing in candidates:
-                    if matches_filters(listing, source):
-                        filtered.append(listing)
-                    else:
-                        source_stats.skipped_filtered += 1
-                source_stats.matched = len(filtered)
-                log_event(
-                    "scraper",
-                    "source {0}: {1} matched, {2} filtered out".format(
-                        source.name,
-                        source_stats.matched,
-                        source_stats.skipped_filtered,
-                    ),
-                )
-
-                if self._should_bootstrap(source, scope_key=scope_key) and not self._dry_run:
-                    for listing in filtered:
-                        self._store.mark_seen(
-                            source.name,
-                            listing.canonical_key,
-                            listing.title,
-                            listing.url,
-                            scope_key=scope_key,
-                        )
-                    source_stats.new_seen_on_bootstrap = len(filtered)
-                    log_event(
-                        "scraper",
-                        "source {0}: bootstrap mode marked {1} listings as seen".format(
-                            source.name,
-                            source_stats.new_seen_on_bootstrap,
-                        ),
+                if source.kind == "imap_link_alerts":
+                    notifications_sent = self._run_imap_source(
+                        source=source,
+                        source_stats=source_stats,
+                        scope_key=scope_key,
+                        destination_chat_id=destination_chat_id,
+                        destination_thread_id=destination_thread_id,
+                        notifications_sent=notifications_sent,
                     )
-                    stats.append(source_stats)
-                    continue
-
-                for listing in filtered:
-                    if self._store.has_seen(source.name, listing.canonical_key, scope_key=scope_key):
-                        if not self._dry_run:
-                            self._store.touch(source.name, listing.canonical_key, scope_key=scope_key)
-                        source_stats.skipped_seen += 1
-                        continue
-                    if notifications_sent >= self._config.runtime.max_notifications_per_run:
-                        log_event("scraper", "notification cap reached for this run")
-                        break
-                    final_listing = self._maybe_enrich_listing(source, listing, extractor)
-                    if not matches_filters(final_listing, source):
-                        source_stats.skipped_filtered += 1
-                        continue
-                    self._notifier.send_listing(
-                        final_listing,
-                        chat_id=destination_chat_id,
-                        message_thread_id=destination_thread_id,
+                else:
+                    notifications_sent = self._run_web_source(
+                        source=source,
+                        source_stats=source_stats,
+                        scope_key=scope_key,
+                        destination_chat_id=destination_chat_id,
+                        destination_thread_id=destination_thread_id,
+                        notifications_sent=notifications_sent,
                     )
-                    if not self._dry_run:
-                        self._store.mark_seen(
-                            source.name,
-                            final_listing.canonical_key,
-                            final_listing.title,
-                            final_listing.url,
-                            scope_key=scope_key,
-                        )
-                    source_stats.notified += 1
-                    notifications_sent += 1
-                log_event(
-                    "scraper",
-                    "source {0}: notified={1}, seen={2}, finished in {3:.1f}s".format(
-                        source.name,
-                        source_stats.notified,
-                        source_stats.skipped_seen,
-                        time.time() - source_started_at,
-                    ),
-                )
             except Exception as exc:
                 source_stats.errors.append(str(exc))
                 log_event(
@@ -153,6 +93,163 @@ class HouseHunterService:
         )
         return stats
 
+    def _run_web_source(
+        self,
+        source: SourceConfig,
+        source_stats: SourceRunStats,
+        scope_key: str,
+        destination_chat_id: str,
+        destination_thread_id: int,
+        notifications_sent: int,
+    ) -> int:
+        log_event("scraper", "fetching source {0}".format(source.name))
+        page_html = self._http_client.get_text(source.search_url)
+        extractor = build_extractor(source.kind)
+        candidates = extractor.extract(source, page_html)
+        source_stats.fetched = len(candidates)
+        log_event("scraper", "source {0}: fetched {1} candidate links".format(source.name, source_stats.fetched))
+        return self._process_candidate_listings(
+            source=source,
+            source_stats=source_stats,
+            candidates=candidates,
+            scope_key=scope_key,
+            destination_chat_id=destination_chat_id,
+            destination_thread_id=destination_thread_id,
+            notifications_sent=notifications_sent,
+            extractor=extractor,
+        )
+
+    def _run_imap_source(
+        self,
+        source: SourceConfig,
+        source_stats: SourceRunStats,
+        scope_key: str,
+        destination_chat_id: str,
+        destination_thread_id: int,
+        notifications_sent: int,
+    ) -> int:
+        if self._imap_client is None:
+            raise RuntimeError("No mailbox config loaded for imap_link_alerts source.")
+        cursor_key = "imap_last_uid:{0}".format(source.name)
+        min_uid = _safe_int(self._store.get_bot_value(cursor_key))
+        log_event("scraper", "fetching email alerts for source {0} (last_uid={1})".format(source.name, min_uid))
+        messages = self._imap_client.fetch_messages(source, min_uid=min_uid)
+        candidates: List[Listing] = []
+        last_uid = min_uid
+        for message in messages:
+            last_uid = max(last_uid, message.uid)
+            if not message_matches_source(source, message):
+                if not self._dry_run:
+                    self._store.set_bot_value(cursor_key, str(message.uid))
+                continue
+            candidates.extend(extract_email_alert_listings(source, message))
+            if not self._dry_run:
+                self._store.set_bot_value(cursor_key, str(message.uid))
+        source_stats.fetched = len(candidates)
+        log_event(
+            "scraper",
+            "source {0}: fetched {1} candidate links from {2} email(s), last_uid={3}".format(
+                source.name,
+                source_stats.fetched,
+                len(messages),
+                last_uid,
+            ),
+        )
+        return self._process_candidate_listings(
+            source=source,
+            source_stats=source_stats,
+            candidates=candidates,
+            scope_key=scope_key,
+            destination_chat_id=destination_chat_id,
+            destination_thread_id=destination_thread_id,
+            notifications_sent=notifications_sent,
+            extractor=None,
+        )
+
+    def _process_candidate_listings(
+        self,
+        source: SourceConfig,
+        source_stats: SourceRunStats,
+        candidates: List[Listing],
+        scope_key: str,
+        destination_chat_id: str,
+        destination_thread_id: int,
+        notifications_sent: int,
+        extractor,
+    ) -> int:
+        filtered = []
+        for listing in candidates:
+            if matches_filters(listing, source):
+                filtered.append(listing)
+            else:
+                source_stats.skipped_filtered += 1
+        source_stats.matched = len(filtered)
+        log_event(
+            "scraper",
+            "source {0}: {1} matched, {2} filtered out".format(
+                source.name,
+                source_stats.matched,
+                source_stats.skipped_filtered,
+            ),
+        )
+
+        if self._should_bootstrap(source, scope_key=scope_key) and not self._dry_run:
+            for listing in filtered:
+                self._store.mark_seen(
+                    source.name,
+                    listing.canonical_key,
+                    listing.title,
+                    listing.url,
+                    scope_key=scope_key,
+                )
+            source_stats.new_seen_on_bootstrap = len(filtered)
+            log_event(
+                "scraper",
+                "source {0}: bootstrap mode marked {1} listings as seen".format(
+                    source.name,
+                    source_stats.new_seen_on_bootstrap,
+                ),
+            )
+            return notifications_sent
+
+        for listing in filtered:
+            if self._store.has_seen(source.name, listing.canonical_key, scope_key=scope_key):
+                if not self._dry_run:
+                    self._store.touch(source.name, listing.canonical_key, scope_key=scope_key)
+                source_stats.skipped_seen += 1
+                continue
+            if notifications_sent >= self._config.runtime.max_notifications_per_run:
+                log_event("scraper", "notification cap reached for this run")
+                break
+            final_listing = self._maybe_enrich_listing(source, listing, extractor)
+            if not matches_filters(final_listing, source):
+                source_stats.skipped_filtered += 1
+                continue
+            self._notifier.send_listing(
+                final_listing,
+                chat_id=destination_chat_id,
+                message_thread_id=destination_thread_id,
+            )
+            if not self._dry_run:
+                self._store.mark_seen(
+                    source.name,
+                    final_listing.canonical_key,
+                    final_listing.title,
+                    final_listing.url,
+                    scope_key=scope_key,
+                )
+            source_stats.notified += 1
+            notifications_sent += 1
+        log_event(
+            "scraper",
+            "source {0}: notified={1}, seen={2}, finished".format(
+                source.name,
+                source_stats.notified,
+                source_stats.skipped_seen,
+            ),
+        )
+        return notifications_sent
+
     def _should_bootstrap(self, source: SourceConfig, scope_key: str = GLOBAL_SCOPE_KEY) -> bool:
         bootstrap_setting = source.bootstrap_mark_seen
         if bootstrap_setting is None:
@@ -162,7 +259,7 @@ class HouseHunterService:
         return self._store.source_seen_count(source.name, scope_key=scope_key) == 0
 
     def _maybe_enrich_listing(self, source: SourceConfig, listing: Listing, extractor) -> Listing:
-        if not source.fetch_details:
+        if not source.fetch_details or extractor is None:
             return listing
         detail_html = self._http_client.get_text(listing.url)
         return extractor.enrich(listing, detail_html)
@@ -208,3 +305,10 @@ def merge_terms(base_terms: List[str], extra_terms: List[str]) -> List[str]:
         seen.add(key)
         merged.append(normalized)
     return merged
+
+
+def _safe_int(value) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0

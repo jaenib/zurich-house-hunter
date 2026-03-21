@@ -5,7 +5,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
-from .models import AppConfig, RuntimeConfig, SourceConfig, TelegramConfig
+from .models import AppConfig, MailboxConfig, RuntimeConfig, SourceConfig, TelegramConfig
 
 ENV_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)(?::([^}]*))?\}")
 
@@ -18,6 +18,7 @@ def load_config(path: str) -> AppConfig:
 
     runtime = payload.get("runtime", {})
     telegram = payload.get("telegram", {})
+    mailbox = payload.get("mailbox")
     sources = payload.get("sources", [])
 
     telegram_config = TelegramConfig(
@@ -37,13 +38,16 @@ def load_config(path: str) -> AppConfig:
         dry_run=bool(runtime.get("dry_run", False)),
     )
 
+    mailbox_config = _load_mailbox_config(mailbox)
+
     source_configs: List[SourceConfig] = []
     for source in sources:
+        kind = str(source.get("kind", "generic_link_cards"))
         source_configs.append(
             SourceConfig(
                 name=_require_string(source, "name"),
-                kind=str(source.get("kind", "generic_link_cards")),
-                search_url=_require_string(source, "search_url"),
+                kind=kind,
+                search_url=_require_source_search_url(source, kind),
                 enabled=bool(source.get("enabled", True)),
                 url_prefix=_optional_string(source.get("url_prefix")),
                 item_url_regex=_optional_string(source.get("item_url_regex")),
@@ -61,13 +65,21 @@ def load_config(path: str) -> AppConfig:
                 max_rooms=_optional_float(source.get("max_rooms")),
                 min_area_sqm=_optional_float(source.get("min_area_sqm")),
                 max_area_sqm=_optional_float(source.get("max_area_sqm")),
+                mailbox_name=_optional_string(source.get("mailbox_name")),
+                email_from_contains_any=_string_list(source.get("email_from_contains_any")),
+                email_subject_contains_any=_string_list(source.get("email_subject_contains_any")),
+                email_link_domains=_string_list(source.get("email_link_domains")),
+                email_max_messages=int(source.get("email_max_messages", 25)),
             )
         )
 
     if not source_configs:
         raise ValueError("Config must define at least one source.")
 
-    return AppConfig(runtime=runtime_config, telegram=telegram_config, sources=source_configs)
+    if any(source.enabled and source.kind == "imap_link_alerts" for source in source_configs) and mailbox_config is None:
+        raise ValueError("Enabled imap_link_alerts sources require a top-level mailbox config.")
+
+    return AppConfig(runtime=runtime_config, telegram=telegram_config, mailbox=mailbox_config, sources=source_configs)
 
 
 def _replace_env(match: re.Match) -> str:
@@ -84,6 +96,12 @@ def _require_string(payload: Dict[str, Any], key: str) -> str:
     if value is None or str(value).strip() == "":
         raise ValueError("Missing required config value: {0}".format(key))
     return str(value)
+
+
+def _require_source_search_url(payload: Dict[str, Any], kind: str) -> str:
+    if kind == "imap_link_alerts":
+        return str(payload.get("search_url", "") or "")
+    return _require_string(payload, "search_url")
 
 
 def _string_list(value: Any) -> List[str]:
@@ -130,3 +148,27 @@ def _optional_chat_id(value: Any) -> Optional[str]:
     if not text or text == "0":
         return None
     return text
+
+
+def _load_mailbox_config(payload: Any) -> Optional[MailboxConfig]:
+    if not payload:
+        return None
+    if not isinstance(payload, dict):
+        raise ValueError("mailbox config must be a JSON object.")
+    host = _optional_string(payload.get("host"))
+    username = _optional_string(payload.get("username"))
+    password = _optional_string(payload.get("password"))
+    if not host:
+        raise ValueError("mailbox.host is required when mailbox config is present.")
+    if not username:
+        raise ValueError("mailbox.username is required when mailbox config is present.")
+    if not password:
+        raise ValueError("mailbox.password is required when mailbox config is present.")
+    return MailboxConfig(
+        host=host,
+        port=int(payload.get("port", 993)),
+        username=username,
+        password=password,
+        mailbox=str(payload.get("mailbox", "INBOX") or "INBOX"),
+        use_ssl=bool(payload.get("use_ssl", True)),
+    )

@@ -24,10 +24,20 @@ class TelegramConfig:
 
 
 @dataclass
+class MailboxConfig:
+    host: str
+    port: int = 993
+    username: str = ""
+    password: str = ""
+    mailbox: str = "INBOX"
+    use_ssl: bool = True
+
+
+@dataclass
 class SourceConfig:
     name: str
     kind: str
-    search_url: str
+    search_url: str = ""
     enabled: bool = True
     url_prefix: Optional[str] = None
     item_url_regex: Optional[str] = None
@@ -45,12 +55,18 @@ class SourceConfig:
     max_rooms: Optional[float] = None
     min_area_sqm: Optional[float] = None
     max_area_sqm: Optional[float] = None
+    mailbox_name: Optional[str] = None
+    email_from_contains_any: List[str] = field(default_factory=list)
+    email_subject_contains_any: List[str] = field(default_factory=list)
+    email_link_domains: List[str] = field(default_factory=list)
+    email_max_messages: int = 25
 
 
 @dataclass
 class AppConfig:
     runtime: RuntimeConfig
     telegram: TelegramConfig
+    mailbox: Optional[MailboxConfig]
     sources: List[SourceConfig]
 
 

@@ -6,6 +6,7 @@ The current project ships with:
 
 - a working default scraper built around the reachable `alle-immobilien` Zurich house search page
 - a generic HTML link-card scraper for additional real-estate sites
+- IMAP-backed ingestion for official portal alert emails
 - SQLite-based deduplication so the chat only gets new listings
 - Telegram Bot API notifications
 - Telegram bot mode that auto-registers group chats and DMs from incoming updates
@@ -15,8 +16,8 @@ The implementation is standard-library only, so it runs on the stock Python 3.8 
 
 ## How it works
 
-1. Fetch each configured search URL.
-2. Extract listing-like links from the page.
+1. Fetch each configured search URL or IMAP mailbox source.
+2. Extract listing-like links from the page or from alert emails.
 3. Parse rough facts from the card text: price, rooms, size, address, title.
 4. Skip listings already seen in the local SQLite database.
 5. Optionally fetch new listing pages for better titles and descriptions.
@@ -38,6 +39,11 @@ cp config.example.json config.json
 export TELEGRAM_BOT_TOKEN="123456:ABCDEF"
 export TELEGRAM_CHAT_ID=""
 export TELEGRAM_THREAD_ID=""
+export IMAP_HOST="imap.example.com"
+export IMAP_PORT="993"
+export IMAP_USERNAME="alerts@example.com"
+export IMAP_PASSWORD="secret"
+export IMAP_MAILBOX="INBOX"
 ```
 
 5. Run a dry pass first:
@@ -59,6 +65,27 @@ python3 hunter.py --config config.json bot-loop --interval-seconds 900 --poll-ti
 ```
 
 `bot-loop` does not need a preconfigured `chat_id`. As soon as the bot is added to a group, or someone sends it `/start` in a DM, it stores that chat ID locally and uses it for future scheduled runs.
+
+## Portal Alerts
+
+For the large portals, the most reliable setup is usually email alerts rather than direct scraping.
+
+The sample config includes disabled `imap_link_alerts` source stubs for:
+
+- `homegate-email-alerts`
+- `immoscout24-email-alerts`
+- `newhome-email-alerts`
+
+Recommended setup:
+
+1. Create a dedicated mailbox for housing alerts.
+2. Create your saved searches / alerts on the portals.
+3. Send those alert emails into that mailbox.
+4. Fill in the top-level `mailbox` config in `config.json`.
+5. Enable the relevant `imap_link_alerts` sources.
+6. Keep the existing web source enabled as a fallback net.
+
+The bot tracks IMAP message UIDs per source, so each alert email is processed once without needing to mark the mailbox as read.
 
 ## Repeating runs
 
@@ -128,7 +155,12 @@ The bot supports these commands in groups and DMs:
 - `min_card_score` matters most for the generic scraper. It scores links that look like listing cards by signals such as `CHF`, `rooms`, and `m²`.
 - `message_thread_id` is optional and only needed if the bot should post into a specific Telegram topic.
 - `telegram.chat_id` is optional for `bot-loop`. Leave it empty to let the bot learn chats from `my_chat_member` and DM/group commands. Keep it set only if you want `run` to target one fixed chat directly.
+- `mailbox` is optional unless you enable `imap_link_alerts` sources.
+- `imap_link_alerts` sources use the top-level mailbox config and can narrow messages with `email_from_contains_any`, `email_subject_contains_any`, and `email_link_domains`.
+- `mailbox_name` can override the default IMAP folder for one source.
+- `email_max_messages` limits how many new IMAP messages a source will inspect per run.
 - The default config disables direct `homegate` and `immoscout24` scraping because they currently return anti-bot challenge pages to scripted clients in this environment. Their listing URLs can still be surfaced through the reachable aggregator source.
+- Email-alert sources are usually more robust than scraping the major portals directly, but their parsing quality still depends on the content included in the alert emails.
 - `bot-loop` auto-registers DMs, groups, and supergroups. If `message_thread_id` is set together with `chat_id`, that restriction only applies to that one configured topic.
 
 ## Responsible use
