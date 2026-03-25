@@ -8,6 +8,10 @@ def matches_filters(listing: Listing, source: SourceConfig) -> bool:
         part for part in [listing.title, listing.address, listing.summary, listing.raw_text] if part
     ).lower()
 
+    if source.allowed_postal_codes_any:
+        allowed_codes = {str(code).strip() for code in source.allowed_postal_codes_any if str(code).strip()}
+        if not listing.postal_code or listing.postal_code not in allowed_codes:
+            return False
     if source.must_contain_any and not any(term.lower() in haystack for term in source.must_contain_any):
         return False
     if source.exclude_if_contains_any and any(term.lower() in haystack for term in source.exclude_if_contains_any):

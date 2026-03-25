@@ -394,11 +394,14 @@ def build_status_message(
             continue
         effective_source = apply_chat_filters_to_source(source, chat_filters)
         lines.append(
-            "- {0}: max_price={1}, min_rooms={2}, min_area={3}".format(
+            "- {0}: max_price={1}, min_rooms={2}, min_area={3}, postcodes={4}".format(
                 source.name,
                 format_optional_number(effective_source.max_price_chf),
                 format_optional_number(effective_source.min_rooms),
                 format_optional_number(effective_source.min_area_sqm),
+                str(len(effective_source.allowed_postal_codes_any))
+                if effective_source.allowed_postal_codes_any
+                else "all",
             )
         )
     lines.append("")

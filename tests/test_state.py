@@ -59,6 +59,17 @@ class StateTests(unittest.TestCase):
             finally:
                 store.close()
 
+    def test_sink_delivery_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "state.sqlite3")
+            store = SeenListingStore(path)
+            try:
+                self.assertFalse(store.has_sink_delivery("google_sheet", "https://example.com/1"))
+                store.mark_sink_delivery("google_sheet", "https://example.com/1", "Title", "https://example.com/1")
+                self.assertTrue(store.has_sink_delivery("google_sheet", "https://example.com/1"))
+            finally:
+                store.close()
+
 
 if __name__ == "__main__":
     unittest.main()

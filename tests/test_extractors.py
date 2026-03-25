@@ -56,6 +56,7 @@ class ExtractorTests(unittest.TestCase):
         self.assertEqual(listing.rooms, 3.5)
         self.assertEqual(listing.area_sqm, 84.0)
         self.assertEqual(listing.address, "Agleistrasse 9, 8046 Zürich")
+        self.assertEqual(listing.postal_code, "8046")
 
     def test_listing_from_aggregator_style_text_prefers_lead_text(self):
         source = SourceConfig(
@@ -72,6 +73,7 @@ class ExtractorTests(unittest.TestCase):
         self.assertEqual(listing.url, "https://example.com/listing/1")
         self.assertIn("Freistehender Bauernhausteil", listing.title)
         self.assertEqual(listing.address, "8614 Bertschikon")
+        self.assertEqual(listing.postal_code, "8614")
         self.assertEqual(listing.rooms, 5.5)
         self.assertEqual(listing.area_sqm, 180.0)
         self.assertEqual(listing.price_chf, 2200.0)

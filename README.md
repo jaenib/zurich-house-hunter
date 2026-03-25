@@ -22,6 +22,7 @@ The implementation is standard-library only, so it runs on the stock Python 3.8 
 4. Skip listings already seen in the local SQLite database.
 5. Optionally fetch new listing pages for better titles and descriptions.
 6. Send one Telegram message per new match.
+7. Optionally append one unique row per listing into Google Sheets.
 
 ## Setup
 
@@ -87,6 +88,20 @@ Recommended setup:
 
 The bot tracks IMAP message UIDs per source, so each alert email is processed once without needing to mark the mailbox as read.
 
+## Google Sheets
+
+The bot can optionally append each unique listing into a Google Sheet through a bound Google Apps Script webhook.
+
+Recommended setup:
+
+1. Open your target spreadsheet.
+2. Create a bound Apps Script project and paste [deploy/google_sheet_webhook/Code.gs](/Users/mimo/Desktop/Programming/Utility/zurich-house-hunter/deploy/google_sheet_webhook/Code.gs).
+3. Set a script property named `WEBHOOK_SECRET` if you want a shared secret.
+4. Deploy the script as a web app that the bot can POST to.
+5. Set `google_sheet.enabled`, `google_sheet.webhook_url`, `google_sheet.webhook_secret`, and `google_sheet.sheet_name` in `config.json`.
+
+The sheet writer creates the target tab if it does not exist, writes the headers if the tab is empty, and deduplicates on the `Link` column. The Python bot also keeps its own SQLite-based Google Sheet delivery log so the same listing is only appended once even if multiple chats receive it.
+
 ## Repeating runs
 
 Cron is the simplest option:
@@ -150,7 +165,9 @@ The bot supports these commands in groups and DMs:
 
 - `bootstrap_mark_seen: true` means the first successful run stores current listings without notifying the group.
 - `--dry-run` previews matches without writing them into the SQLite state.
+- `google_sheet` is optional. When enabled, the bot appends `Adresse`, `ÖVMinHB`, `VeloMinHB`, `CHF`, `AnzZimmer`, `CHF/Zimmer`, `HouseFlat`, `Link`, and `BigNoNos` to the configured sheet tab.
 - `must_contain_any` and `exclude_if_contains_any` are case-insensitive substring filters.
+- `allowed_postal_codes_any` filters on the extracted Swiss 4-digit postcode from the listing card text. The sample config narrows the canton-wide source to Zurich city plus nearby postcodes within roughly 10 km of central Zurich.
 - `min_rooms`, `max_rooms`, `min_price_chf`, `max_price_chf`, `min_area_sqm`, `max_area_sqm` are optional numeric filters.
 - `min_card_score` matters most for the generic scraper. It scores links that look like listing cards by signals such as `CHF`, `rooms`, and `m²`.
 - `message_thread_id` is optional and only needed if the bot should post into a specific Telegram topic.

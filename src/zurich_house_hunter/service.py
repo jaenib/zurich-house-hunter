@@ -6,12 +6,15 @@ from typing import List
 
 from .extractors import build_extractor
 from .filters import matches_filters
+from .google_sheet import GoogleSheetWriter
 from .http import HttpClient
 from .imap_alerts import ImapAlertClient, extract_email_alert_listings, message_matches_source
 from .logging_utils import log_event
 from .models import AppConfig, ChatFilters, Listing, SourceConfig, SourceRunStats
 from .state import GLOBAL_SCOPE_KEY, SeenListingStore
 from .telegram import TelegramNotifier
+
+GOOGLE_SHEET_SINK_NAME = "google_sheet"
 
 
 class HouseHunterService:
@@ -25,6 +28,11 @@ class HouseHunterService:
         )
         self._store = SeenListingStore(config.runtime.state_db_path)
         self._notifier = TelegramNotifier(self._http_client, config.telegram, dry_run=effective_dry_run)
+        self._google_sheet = (
+            GoogleSheetWriter(self._http_client, config.google_sheet, dry_run=effective_dry_run)
+            if config.google_sheet is not None and config.google_sheet.enabled
+            else None
+        )
         self._imap_client = ImapAlertClient(config.mailbox) if config.mailbox is not None else None
         self._dry_run = effective_dry_run
 
@@ -230,6 +238,7 @@ class HouseHunterService:
                 chat_id=destination_chat_id,
                 message_thread_id=destination_thread_id,
             )
+            self._append_google_sheet_row(final_listing, source_stats)
             if not self._dry_run:
                 self._store.mark_seen(
                     source.name,
@@ -263,6 +272,26 @@ class HouseHunterService:
             return listing
         detail_html = self._http_client.get_text(listing.url)
         return extractor.enrich(listing, detail_html)
+
+    def _append_google_sheet_row(self, listing: Listing, source_stats: SourceRunStats) -> None:
+        if self._google_sheet is None:
+            return
+        if self._store.has_sink_delivery(GOOGLE_SHEET_SINK_NAME, listing.canonical_key):
+            return
+        try:
+            self._google_sheet.append_listing(listing)
+        except Exception as exc:
+            message = "google_sheet append failed for {0}: {1}".format(listing.canonical_key, exc)
+            source_stats.errors.append(message)
+            log_event("scraper", message)
+            return
+        if not self._dry_run:
+            self._store.mark_sink_delivery(
+                GOOGLE_SHEET_SINK_NAME,
+                listing.canonical_key,
+                listing.title,
+                listing.url,
+            )
 
     def _effective_sources(self, chat_filters: ChatFilters = None) -> List[SourceConfig]:
         if chat_filters is None:

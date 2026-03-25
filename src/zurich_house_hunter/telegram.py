@@ -21,7 +21,12 @@ class TelegramNotifier:
         message_thread_id: Optional[int] = None,
     ) -> None:
         message = build_listing_message(listing)
-        self.send_html(message, chat_id=chat_id, message_thread_id=message_thread_id)
+        self.send_html(
+            message,
+            chat_id=chat_id,
+            message_thread_id=message_thread_id,
+            disable_web_page_preview=True,
+        )
 
     def send_html(
         self,
@@ -29,6 +34,7 @@ class TelegramNotifier:
         chat_id: Optional[str] = None,
         message_thread_id: Optional[int] = None,
         reply_to_message_id: Optional[int] = None,
+        disable_web_page_preview: Optional[bool] = None,
     ) -> None:
         if self._dry_run:
             print(message)
@@ -39,11 +45,14 @@ class TelegramNotifier:
         if not effective_chat_id:
             raise RuntimeError("Telegram chat_id is missing. Use bot-loop to auto-register chats or set telegram.chat_id.")
 
+        effective_disable_web_page_preview = self._config.disable_web_page_preview
+        if disable_web_page_preview is not None:
+            effective_disable_web_page_preview = disable_web_page_preview
         payload = {
             "chat_id": effective_chat_id,
             "text": message,
             "parse_mode": "HTML",
-            "disable_web_page_preview": "true" if self._config.disable_web_page_preview else "false",
+            "disable_web_page_preview": "true" if effective_disable_web_page_preview else "false",
         }
         effective_thread_id = message_thread_id
         if effective_thread_id is None:
@@ -87,19 +96,13 @@ class TelegramNotifier:
 
 
 def build_listing_message(listing: Listing) -> str:
-    lines = ["<b>New Zurich housing match</b>", escape(listing.title or "Untitled listing")]
-    if listing.price_text:
-        lines.append("Price: {0}".format(escape(listing.price_text)))
-    if listing.rooms is not None:
-        lines.append("Rooms: {0:g}".format(listing.rooms))
-    if listing.area_sqm is not None:
-        lines.append("Area: {0:g} m²".format(listing.area_sqm))
+    lines = ['<a href="{0}">Open listing</a>'.format(escape(listing.url, quote=True))]
     if listing.address:
         lines.append("Address: {0}".format(escape(listing.address)))
-    lines.append("Source: {0}".format(escape(listing.source_name)))
-    if listing.summary:
-        lines.append("")
-        lines.append(escape(listing.summary[:350]))
-    lines.append("")
-    lines.append(escape(listing.url))
+    if listing.price_text:
+        lines.append("Price: {0}".format(escape(listing.price_text)))
+    elif listing.price_chf is not None:
+        lines.append("Price: CHF {0:g}".format(listing.price_chf))
+    if listing.rooms is not None:
+        lines.append("Rooms: {0:g}".format(listing.rooms))
     return "\n".join(lines)

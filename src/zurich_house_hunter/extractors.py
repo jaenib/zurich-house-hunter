@@ -13,6 +13,7 @@ ROOMS_RE = re.compile(
     re.IGNORECASE,
 )
 AREA_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:m²|m2|m\s*2|sqm|m\^\{2\})", re.IGNORECASE)
+POSTAL_CODE_RE = re.compile(r"\b(\d{4})\s+[A-ZÄÖÜÀ-ÿ]")
 POSTAL_CITY_RE = re.compile(
     r"\d{4}\s+[A-ZÄÖÜÀ-ÿ][A-Za-zÄÖÜÀ-ÿ.-]+(?:\s+[A-ZÄÖÜÀ-ÿ][A-Za-zÄÖÜÀ-ÿ.-]+)?"
 )
@@ -97,6 +98,7 @@ class HomegateExtractor(GenericLinkCardExtractor):
             bootstrap_mark_seen=source.bootstrap_mark_seen,
             must_contain_any=source.must_contain_any,
             exclude_if_contains_any=source.exclude_if_contains_any,
+            allowed_postal_codes_any=source.allowed_postal_codes_any,
             min_price_chf=source.min_price_chf,
             max_price_chf=source.max_price_chf,
             min_rooms=source.min_rooms,
@@ -122,6 +124,7 @@ def listing_from_text(source: SourceConfig, url: str, raw_text: str) -> Listing:
     rooms_match = ROOMS_RE.search(cleaned)
     area_match = AREA_RE.search(cleaned)
     address = extract_address(cleaned)
+    postal_code = extract_postal_code(address) or extract_postal_code(cleaned)
     price_text = "CHF {0}".format(price_match.group(1)) if price_match else ""
     price_chf = parse_number(price_match.group(1)) if price_match else None
     rooms = parse_number(first_present_group(rooms_match)) if rooms_match else None
@@ -137,6 +140,7 @@ def listing_from_text(source: SourceConfig, url: str, raw_text: str) -> Listing:
         raw_text=cleaned,
         title=title,
         address=address,
+        postal_code=postal_code,
         summary=summary,
         price_text=price_text,
         price_chf=price_chf,
@@ -296,6 +300,13 @@ def extract_address(text: str) -> str:
         if street:
             return "{0}, {1}".format(street, postal_city)
     return trim_address(postal_city)
+
+
+def extract_postal_code(text: str) -> str:
+    if not text:
+        return ""
+    match = POSTAL_CODE_RE.search(clean_text(text))
+    return match.group(1) if match else ""
 
 
 def normalize_postal_city(value: str) -> str:

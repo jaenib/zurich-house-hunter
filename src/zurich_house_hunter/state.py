@@ -212,6 +212,31 @@ class SeenListingStore:
         )
         self._connection.commit()
 
+    def has_sink_delivery(self, sink_name: str, canonical_key: str) -> bool:
+        cursor = self._connection.execute(
+            """
+            SELECT 1
+            FROM sink_deliveries
+            WHERE sink_name = ? AND canonical_key = ?
+            LIMIT 1
+            """,
+            (sink_name, canonical_key),
+        )
+        return cursor.fetchone() is not None
+
+    def mark_sink_delivery(self, sink_name: str, canonical_key: str, title: str, url: str) -> None:
+        now = utc_now()
+        self._connection.execute(
+            """
+            INSERT INTO sink_deliveries (sink_name, canonical_key, title, url, first_delivered_at, last_delivered_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(sink_name, canonical_key)
+            DO UPDATE SET title = excluded.title, url = excluded.url, last_delivered_at = excluded.last_delivered_at
+            """,
+            (sink_name, canonical_key, title, url, now, now),
+        )
+        self._connection.commit()
+
     def _ensure_schema(self) -> None:
         self._connection.execute(
             """
@@ -267,6 +292,19 @@ class SeenListingStore:
                 is_active INTEGER NOT NULL,
                 default_message_thread_id INTEGER,
                 last_seen_at TEXT NOT NULL
+            )
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sink_deliveries (
+                sink_name TEXT NOT NULL,
+                canonical_key TEXT NOT NULL,
+                title TEXT NOT NULL,
+                url TEXT NOT NULL,
+                first_delivered_at TEXT NOT NULL,
+                last_delivered_at TEXT NOT NULL,
+                PRIMARY KEY (sink_name, canonical_key)
             )
             """
         )

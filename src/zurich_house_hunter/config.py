@@ -5,7 +5,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
-from .models import AppConfig, MailboxConfig, RuntimeConfig, SourceConfig, TelegramConfig
+from .models import AppConfig, GoogleSheetConfig, MailboxConfig, RuntimeConfig, SourceConfig, TelegramConfig
 
 ENV_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)(?::([^}]*))?\}")
 
@@ -19,6 +19,7 @@ def load_config(path: str) -> AppConfig:
     runtime = payload.get("runtime", {})
     telegram = payload.get("telegram", {})
     mailbox = payload.get("mailbox")
+    google_sheet = payload.get("google_sheet")
     sources = payload.get("sources", [])
 
     telegram_config = TelegramConfig(
@@ -39,6 +40,7 @@ def load_config(path: str) -> AppConfig:
     )
 
     mailbox_config = _load_mailbox_config(mailbox)
+    google_sheet_config = _load_google_sheet_config(google_sheet)
 
     source_configs: List[SourceConfig] = []
     for source in sources:
@@ -59,6 +61,7 @@ def load_config(path: str) -> AppConfig:
                 bootstrap_mark_seen=_optional_bool(source.get("bootstrap_mark_seen")),
                 must_contain_any=_string_list(source.get("must_contain_any")),
                 exclude_if_contains_any=_string_list(source.get("exclude_if_contains_any")),
+                allowed_postal_codes_any=_string_list(source.get("allowed_postal_codes_any")),
                 min_price_chf=_optional_float(source.get("min_price_chf")),
                 max_price_chf=_optional_float(source.get("max_price_chf")),
                 min_rooms=_optional_float(source.get("min_rooms")),
@@ -79,7 +82,13 @@ def load_config(path: str) -> AppConfig:
     if any(source.enabled and source.kind == "imap_link_alerts" for source in source_configs) and mailbox_config is None:
         raise ValueError("Enabled imap_link_alerts sources require a top-level mailbox config.")
 
-    return AppConfig(runtime=runtime_config, telegram=telegram_config, mailbox=mailbox_config, sources=source_configs)
+    return AppConfig(
+        runtime=runtime_config,
+        telegram=telegram_config,
+        mailbox=mailbox_config,
+        google_sheet=google_sheet_config,
+        sources=source_configs,
+    )
 
 
 def _replace_env(match: re.Match) -> str:
@@ -171,4 +180,23 @@ def _load_mailbox_config(payload: Any) -> Optional[MailboxConfig]:
         password=password,
         mailbox=str(payload.get("mailbox", "INBOX") or "INBOX"),
         use_ssl=bool(payload.get("use_ssl", True)),
+    )
+
+
+def _load_google_sheet_config(payload: Any) -> Optional[GoogleSheetConfig]:
+    if not payload:
+        return None
+    if not isinstance(payload, dict):
+        raise ValueError("google_sheet config must be a JSON object.")
+    enabled = bool(payload.get("enabled", False))
+    webhook_url = _optional_string(payload.get("webhook_url")) or ""
+    webhook_secret = _optional_string(payload.get("webhook_secret")) or ""
+    sheet_name = _optional_string(payload.get("sheet_name")) or "House Hunter Test"
+    if enabled and not webhook_url:
+        raise ValueError("google_sheet.webhook_url is required when google_sheet.enabled is true.")
+    return GoogleSheetConfig(
+        enabled=enabled,
+        webhook_url=webhook_url,
+        webhook_secret=webhook_secret,
+        sheet_name=sheet_name,
     )

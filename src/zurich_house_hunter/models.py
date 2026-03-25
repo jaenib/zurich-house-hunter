@@ -34,6 +34,14 @@ class MailboxConfig:
 
 
 @dataclass
+class GoogleSheetConfig:
+    enabled: bool = False
+    webhook_url: str = ""
+    webhook_secret: str = ""
+    sheet_name: str = "House Hunter Test"
+
+
+@dataclass
 class SourceConfig:
     name: str
     kind: str
@@ -49,6 +57,7 @@ class SourceConfig:
     bootstrap_mark_seen: Optional[bool] = None
     must_contain_any: List[str] = field(default_factory=list)
     exclude_if_contains_any: List[str] = field(default_factory=list)
+    allowed_postal_codes_any: List[str] = field(default_factory=list)
     min_price_chf: Optional[float] = None
     max_price_chf: Optional[float] = None
     min_rooms: Optional[float] = None
@@ -67,6 +76,7 @@ class AppConfig:
     runtime: RuntimeConfig
     telegram: TelegramConfig
     mailbox: Optional[MailboxConfig]
+    google_sheet: Optional[GoogleSheetConfig]
     sources: List[SourceConfig]
 
 
@@ -100,6 +110,7 @@ class Listing:
     raw_text: str
     title: str = ""
     address: str = ""
+    postal_code: str = ""
     summary: str = ""
     price_text: str = ""
     price_chf: Optional[float] = None
