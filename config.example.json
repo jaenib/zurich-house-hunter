@@ -32,7 +32,7 @@
       "name": "alle-immobilien-zuerich-houses",
       "kind": "generic_link_cards",
       "enabled": true,
-      "search_url": "https://www.alle-immobilien.ch/de/mieten/haus/kanton-zuerich?sort=dd",
+      "search_url": "https://www.alle-immobilien.ch/de/mieten/haus/kanton-zurich?sort=dd",
       "max_items": 25,
       "fetch_details": false,
       "same_domain_only": false,
