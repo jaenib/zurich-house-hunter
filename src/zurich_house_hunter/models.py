@@ -91,6 +91,7 @@ class ChatFilters:
     max_area_sqm: Optional[float] = None
     include_terms: List[str] = field(default_factory=list)
     exclude_terms: List[str] = field(default_factory=list)
+    radius_km: Optional[float] = None
 
 
 @dataclass

@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from typing import Dict, List, Optional, Tuple
 
+from .geo import postal_codes_within_radius
 from .http import HttpClient
 from .logging_utils import log_event
 from .models import AppConfig, ChatFilters, ChatTarget, SourceRunStats
@@ -220,15 +221,22 @@ class GroupChatBot:
 
     def _handle_set_command(self, filters: ChatFilters, args: List[str]) -> str:
         if len(args) < 2:
-            return "Usage: /set <max_price|min_price|min_rooms|max_rooms|min_area|max_area> <value>"
+            return "Usage: /set <max_price|min_price|min_rooms|max_rooms|min_area|max_area|radius> <value>"
         field_key = args[0].strip().lower()
-        field_name = NUMERIC_FILTER_FIELDS.get(field_key)
-        if field_name is None:
-            return "Unknown filter field. Use /help."
         try:
             value = float(args[1])
         except ValueError:
             return "Filter values must be numeric."
+        if field_key == "radius":
+            if value <= 0:
+                return "Radius must be greater than 0."
+            filters.radius_km = value
+            self._store.save_chat_filters(filters)
+            codes = postal_codes_within_radius(value)
+            return "Radius set to {0:g} km ({1} postal codes).".format(value, len(codes))
+        field_name = NUMERIC_FILTER_FIELDS.get(field_key)
+        if field_name is None:
+            return "Unknown filter field. Use /help."
         setattr(filters, field_name, value)
         self._store.save_chat_filters(filters)
         return "Updated {0} to {1:g}.".format(field_name, value)
@@ -258,6 +266,7 @@ class GroupChatBot:
             filters.max_area_sqm = None
             filters.include_terms = []
             filters.exclude_terms = []
+            filters.radius_km = None
             self._store.save_chat_filters(filters)
             return "Cleared all chat overrides."
         if field_key == "include":
@@ -268,6 +277,10 @@ class GroupChatBot:
             filters.exclude_terms = []
             self._store.save_chat_filters(filters)
             return "Cleared exclude terms."
+        if field_key == "radius":
+            filters.radius_km = None
+            self._store.save_chat_filters(filters)
+            return "Cleared radius (using source default postal codes)."
         field_name = NUMERIC_FILTER_FIELDS.get(field_key)
         if field_name is None:
             return "Unknown field to clear. Use /help."
@@ -352,9 +365,11 @@ def build_help_message() -> str:
             "/set max_price 8000",
             "/set min_rooms 4.5",
             "/set min_area 120",
+            "/set radius 5",
             "/include chalet",
             "/exclude temporary",
             "/clear max_price",
+            "/clear radius",
             "/clear include",
             "/clear all",
             "/run",
@@ -387,6 +402,11 @@ def build_status_message(
     lines.append("- max_area_sqm: {0}".format(format_optional_number(chat_filters.max_area_sqm)))
     lines.append("- include_terms: {0}".format(", ".join(chat_filters.include_terms) if chat_filters.include_terms else "none"))
     lines.append("- exclude_terms: {0}".format(", ".join(chat_filters.exclude_terms) if chat_filters.exclude_terms else "none"))
+    if chat_filters.radius_km is not None:
+        codes = postal_codes_within_radius(chat_filters.radius_km)
+        lines.append("- radius_km: {0:g} ({1} postal codes)".format(chat_filters.radius_km, len(codes)))
+    else:
+        lines.append("- radius_km: source default")
     lines.append("")
     lines.append("Enabled sources:")
     for source in config.sources:

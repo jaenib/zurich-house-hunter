@@ -61,6 +61,7 @@ class SeenListingStore:
             max_area_sqm=_optional_float(payload.get("max_area_sqm")),
             include_terms=_string_list(payload.get("include_terms")),
             exclude_terms=_string_list(payload.get("exclude_terms")),
+            radius_km=_optional_float(payload.get("radius_km")),
         )
 
     def save_chat_filters(self, filters: ChatFilters) -> None:
@@ -73,6 +74,7 @@ class SeenListingStore:
             "max_area_sqm": filters.max_area_sqm,
             "include_terms": filters.include_terms,
             "exclude_terms": filters.exclude_terms,
+            "radius_km": filters.radius_km,
         }
         self._connection.execute(
             """

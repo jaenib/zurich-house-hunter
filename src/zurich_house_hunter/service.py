@@ -6,6 +6,7 @@ from typing import List
 
 from .extractors import build_extractor
 from .filters import matches_filters
+from .geo import postal_codes_within_radius
 from .google_sheet import GoogleSheetWriter
 from .http import HttpClient
 from .imap_alerts import ImapAlertClient, extract_email_alert_listings, message_matches_source
@@ -300,6 +301,11 @@ class HouseHunterService:
 
 
 def apply_chat_filters_to_source(source: SourceConfig, chat_filters: ChatFilters) -> SourceConfig:
+    effective_codes = (
+        postal_codes_within_radius(chat_filters.radius_km)
+        if chat_filters.radius_km is not None
+        else source.allowed_postal_codes_any
+    )
     return replace(
         source,
         min_price_chf=chat_filters.min_price_chf
@@ -318,6 +324,7 @@ def apply_chat_filters_to_source(source: SourceConfig, chat_filters: ChatFilters
         else source.max_area_sqm,
         must_contain_any=merge_terms(source.must_contain_any, chat_filters.include_terms),
         exclude_if_contains_any=merge_terms(source.exclude_if_contains_any, chat_filters.exclude_terms),
+        allowed_postal_codes_any=effective_codes,
     )
 
 
