@@ -167,7 +167,7 @@ The bot supports these commands in groups and DMs:
 - `--dry-run` previews matches without writing them into the SQLite state.
 - `google_sheet` is optional. When enabled, the bot appends `Adresse`, `ÖVMinHB`, `VeloMinHB`, `CHF`, `AnzZimmer`, `CHF/Zimmer`, `HouseFlat`, `Link`, and `BigNoNos` to the configured sheet tab.
 - `must_contain_any` and `exclude_if_contains_any` are case-insensitive substring filters.
-- `allowed_postal_codes_any` filters on the extracted Swiss 4-digit postcode from the listing card text. The sample config narrows the canton-wide source to Zurich city plus nearby postcodes within roughly 10 km of central Zurich.
+- `allowed_postal_codes_any` filters on the extracted Swiss 4-digit postcode from the listing card text. The sample config narrows the canton-wide source to Zurich city plus nearby postcodes within roughly 5 km of central Zurich.
 - `min_rooms`, `max_rooms`, `min_price_chf`, `max_price_chf`, `min_area_sqm`, `max_area_sqm` are optional numeric filters.
 - `min_card_score` matters most for the generic scraper. It scores links that look like listing cards by signals such as `CHF`, `rooms`, and `m²`.
 - `message_thread_id` is optional and only needed if the bot should post into a specific Telegram topic.
