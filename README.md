@@ -124,26 +124,30 @@ python3 hunter.py --config config.json bot-loop --interval-seconds 900 --poll-ti
 
 ## Deploy
 
-The server pattern for this repo now matches your older bots: copy the project to `/usr/bots/zurich-house-hunter` on the server and run it via `systemd`.
+Deploys automatically on every push to `main` via GitHub Actions (`.github/workflows/deploy.yml`).
 
-Deploy from this machine with:
+The workflow SSHes into the production server and runs:
 
-```bash
-bash deploy/deploy_to_server.sh
+```
+git pull --ff-only origin main
+pip install -e .
+systemctl restart zurich-house-hunter
 ```
 
-That script:
+This replaces the previous `deploy/deploy_to_server.sh` rsync approach. The key differences:
 
-- syncs the repo to `root@82.165.45.100:/usr/bots/zurich-house-hunter`
-- keeps `data/` on the server intact
-- copies the systemd unit from [deploy/zurich-house-hunter.service](/Users/mimo/Desktop/Programming/Utility/zurich-house-hunter/deploy/zurich-house-hunter.service)
-- enables and restarts `zurich-house-hunter.service`
+- **Before:** `rsync` from local machine, required running a script manually, copied all files wholesale including `config.json` if present locally.
+- **Now:** GitHub Actions triggers on push to `main`, pulls only tracked changes via `git`, never touches gitignored files (`config.json`, `data/`), and restarts the service automatically.
+
+The old `deploy/` directory (shell script, systemd unit) is kept for reference and initial server setup.
 
 Notes:
 
-- `config.json` is intentionally gitignored and is still deployed to the server by the script if it exists locally.
-- Runtime logs go to `journalctl -u zurich-house-hunter.service -f`.
-- The service starts the bot loop, not the one-shot CLI run.
+- `config.json` is gitignored and lives only on the server — pushes never overwrite it.
+- `data/` (SQLite state) is also gitignored and preserved across deploys.
+- Runtime logs: `journalctl -u zurich-house-hunter.service -f`
+- Manual re-deploy: trigger the workflow via GitHub Actions UI (workflow_dispatch).
+- The service runs the bot loop, not the one-shot CLI.
 
 ## Group Commands
 
