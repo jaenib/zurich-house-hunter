@@ -322,7 +322,9 @@ def apply_chat_filters_to_source(source: SourceConfig, chat_filters: ChatFilters
         max_area_sqm=chat_filters.max_area_sqm
         if chat_filters.max_area_sqm is not None
         else source.max_area_sqm,
-        must_contain_any=merge_terms(source.must_contain_any, chat_filters.include_terms),
+        must_contain_any=list(chat_filters.include_terms)
+        if chat_filters.houses_only is False
+        else merge_terms(source.must_contain_any, chat_filters.include_terms),
         exclude_if_contains_any=merge_terms(source.exclude_if_contains_any, chat_filters.exclude_terms),
         allowed_postal_codes_any=effective_codes,
     )

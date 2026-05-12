@@ -92,6 +92,7 @@ class ChatFilters:
     include_terms: List[str] = field(default_factory=list)
     exclude_terms: List[str] = field(default_factory=list)
     radius_km: Optional[float] = None
+    houses_only: Optional[bool] = None
 
 
 @dataclass
@@ -118,6 +119,7 @@ class Listing:
     rooms: Optional[float] = None
     area_sqm: Optional[float] = None
     search_url: str = ""
+    image_url: str = ""
 
 
 @dataclass

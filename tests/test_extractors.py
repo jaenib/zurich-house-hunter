@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from zurich_house_hunter.extractors import HomegateExtractor, listing_from_text
+from zurich_house_hunter.extractors import HomegateExtractor, GenericLinkCardExtractor, listing_from_text
 from zurich_house_hunter.models import SourceConfig
 
 
@@ -16,6 +16,28 @@ HOMEGATE_HTML = """
       Charmantes 5.5-Zimmer-Doppel-Einfamilienhaus mit Garten in Zürich-Wollishofen
     </a>
     <a href="/services/something">Create an Ad</a>
+  </body>
+</html>
+"""
+
+CARD_HTML_WITH_IMAGE = """
+<html>
+  <body>
+    <a href="/listing/42">
+      <img src="/images/listing42_thumb.jpg" alt="Haus">
+      CHF 4,500.– 4.5 rooms 120m² 8001 Zürich Einfamilienhaus mit Garten
+    </a>
+  </body>
+</html>
+"""
+
+CARD_HTML_WITH_LAZY_IMAGE = """
+<html>
+  <body>
+    <a href="/listing/43">
+      <img src="" data-src="/images/listing43_lazy.jpg" alt="Haus">
+      CHF 3,800.– 3.5 rooms 90m² 8002 Zürich Reiheneinfamilienhaus
+    </a>
   </body>
 </html>
 """
@@ -77,6 +99,39 @@ class ExtractorTests(unittest.TestCase):
         self.assertEqual(listing.rooms, 5.5)
         self.assertEqual(listing.area_sqm, 180.0)
         self.assertEqual(listing.price_chf, 2200.0)
+
+
+    def test_extractor_captures_image_url(self):
+        source = SourceConfig(
+            name="test-source",
+            kind="generic_link_cards",
+            search_url="https://example.com/search",
+            min_card_score=1,
+        )
+        listings = GenericLinkCardExtractor().extract(source, CARD_HTML_WITH_IMAGE)
+        self.assertEqual(len(listings), 1)
+        self.assertEqual(listings[0].image_url, "https://example.com/images/listing42_thumb.jpg")
+
+    def test_extractor_captures_lazy_image_via_data_src(self):
+        source = SourceConfig(
+            name="test-source",
+            kind="generic_link_cards",
+            search_url="https://example.com/search",
+            min_card_score=1,
+        )
+        listings = GenericLinkCardExtractor().extract(source, CARD_HTML_WITH_LAZY_IMAGE)
+        self.assertEqual(len(listings), 1)
+        self.assertEqual(listings[0].image_url, "https://example.com/images/listing43_lazy.jpg")
+
+    def test_extractor_no_image_when_absent(self):
+        source = SourceConfig(
+            name="test-source",
+            kind="generic_link_cards",
+            search_url="https://example.com/search",
+        )
+        listings = GenericLinkCardExtractor().extract(source, HOMEGATE_HTML)
+        for listing in listings:
+            self.assertEqual(listing.image_url, "")
 
 
 if __name__ == "__main__":

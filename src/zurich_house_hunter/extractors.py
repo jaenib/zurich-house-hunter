@@ -40,6 +40,8 @@ class BaseExtractor:
             listing.title = clean_text(detail_title)
         if detail_summary:
             listing.summary = clean_text(detail_summary)
+        if metadata.og_image and not listing.image_url:
+            listing.image_url = metadata.og_image
         return listing
 
 
@@ -74,6 +76,8 @@ class GenericLinkCardExtractor(BaseExtractor):
             if url in seen_urls:
                 continue
             listing = listing_from_text(source, url, raw_text)
+            if anchor.image_url:
+                listing.image_url = urljoin(source.search_url, anchor.image_url)
             listings.append(listing)
             seen_urls[url] = True
             if len(listings) >= source.max_items:
