@@ -34,6 +34,8 @@ class AnchorCollector(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: List[tuple]) -> None:
         if tag == "a":
+            if self._current_href is not None:
+                return  # ignore nested <a> — keep the outer anchor intact
             attr_map = dict(attrs)
             href = attr_map.get("href", "").strip()
             if not href:
