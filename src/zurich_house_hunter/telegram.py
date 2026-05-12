@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from html import escape
 from typing import Dict, List, Optional
+from urllib.parse import quote as urlquote
 
 from .http import HttpClient
 from .models import Listing, TelegramConfig
@@ -21,12 +22,53 @@ class TelegramNotifier:
         message_thread_id: Optional[int] = None,
     ) -> None:
         message = build_listing_message(listing)
-        self.send_html(
-            message,
-            chat_id=chat_id,
-            message_thread_id=message_thread_id,
-            disable_web_page_preview=True,
-        )
+        if listing.image_url:
+            self.send_photo(
+                listing.image_url,
+                caption=message,
+                chat_id=chat_id,
+                message_thread_id=message_thread_id,
+            )
+        else:
+            self.send_html(
+                message,
+                chat_id=chat_id,
+                message_thread_id=message_thread_id,
+                disable_web_page_preview=True,
+            )
+
+    def send_photo(
+        self,
+        photo_url: str,
+        caption: str,
+        chat_id: Optional[str] = None,
+        message_thread_id: Optional[int] = None,
+    ) -> None:
+        if self._dry_run:
+            print("[photo] {0}".format(photo_url))
+            print(caption)
+            print("")
+            return
+
+        effective_chat_id = chat_id or self._config.chat_id
+        if not effective_chat_id:
+            raise RuntimeError("Telegram chat_id is missing.")
+
+        payload: Dict[str, str] = {
+            "chat_id": effective_chat_id,
+            "photo": photo_url,
+            "caption": caption,
+            "parse_mode": "HTML",
+        }
+        effective_thread_id = message_thread_id
+        if effective_thread_id is None:
+            effective_thread_id = self._config.message_thread_id
+        if effective_thread_id is not None:
+            payload["message_thread_id"] = str(effective_thread_id)
+        url = "https://api.telegram.org/bot{0}/sendPhoto".format(self._config.bot_token)
+        response = self._http_client.post_form(url, payload)
+        if not response.get("ok"):
+            raise RuntimeError("Telegram sendPhoto failed: {0}".format(response.get("description", "unknown error")))
 
     def send_html(
         self,
@@ -98,7 +140,8 @@ class TelegramNotifier:
 def build_listing_message(listing: Listing) -> str:
     lines = ['<a href="{0}">Open listing</a>'.format(escape(listing.url, quote=True))]
     if listing.address:
-        lines.append("Address: {0}".format(escape(listing.address)))
+        maps_url = "https://www.google.com/maps/search/?api=1&query={0}".format(urlquote(listing.address))
+        lines.append('Address: <a href="{0}">{1}</a>'.format(escape(maps_url, quote=True), escape(listing.address)))
     if listing.price_text:
         lines.append("Price: {0}".format(escape(listing.price_text)))
     elif listing.price_chf is not None:

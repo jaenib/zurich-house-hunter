@@ -221,8 +221,19 @@ class GroupChatBot:
 
     def _handle_set_command(self, filters: ChatFilters, args: List[str]) -> str:
         if len(args) < 2:
-            return "Usage: /set <max_price|min_price|min_rooms|max_rooms|min_area|max_area|radius> <value>"
+            return "Usage: /set <max_price|min_price|min_rooms|max_rooms|min_area|max_area|radius|houses_only> <value>"
         field_key = args[0].strip().lower()
+        if field_key == "houses_only":
+            raw = args[1].strip().lower()
+            if raw in {"true", "1", "yes", "on"}:
+                filters.houses_only = True
+                self._store.save_chat_filters(filters)
+                return "Houses only: on (apartments excluded)."
+            if raw in {"false", "0", "no", "off"}:
+                filters.houses_only = False
+                self._store.save_chat_filters(filters)
+                return "Houses only: off (apartments included)."
+            return "Use true or false."
         try:
             value = float(args[1])
         except ValueError:
@@ -267,6 +278,7 @@ class GroupChatBot:
             filters.include_terms = []
             filters.exclude_terms = []
             filters.radius_km = None
+            filters.houses_only = None
             self._store.save_chat_filters(filters)
             return "Cleared all chat overrides."
         if field_key == "include":
@@ -281,6 +293,10 @@ class GroupChatBot:
             filters.radius_km = None
             self._store.save_chat_filters(filters)
             return "Cleared radius (using source default postal codes)."
+        if field_key == "houses_only":
+            filters.houses_only = None
+            self._store.save_chat_filters(filters)
+            return "Cleared houses_only (using source default)."
         field_name = NUMERIC_FILTER_FIELDS.get(field_key)
         if field_name is None:
             return "Unknown field to clear. Use /help."
@@ -366,10 +382,12 @@ def build_help_message() -> str:
             "/set min_rooms 4.5",
             "/set min_area 120",
             "/set radius 5",
+            "/set houses_only false",
             "/include chalet",
             "/exclude temporary",
             "/clear max_price",
             "/clear radius",
+            "/clear houses_only",
             "/clear include",
             "/clear all",
             "/run",
@@ -407,6 +425,12 @@ def build_status_message(
         lines.append("- radius_km: {0:g} ({1} postal codes)".format(chat_filters.radius_km, len(codes)))
     else:
         lines.append("- radius_km: source default")
+    if chat_filters.houses_only is None:
+        lines.append("- houses_only: source default")
+    elif chat_filters.houses_only:
+        lines.append("- houses_only: on (apartments excluded)")
+    else:
+        lines.append("- houses_only: off (apartments included)")
     lines.append("")
     lines.append("Enabled sources:")
     for source in config.sources:

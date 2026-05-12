@@ -149,6 +149,72 @@ class RadiusCommandIntegrationTests(unittest.TestCase):
         status = build_status_message(self._config, filters, [])
         self.assertIn("source default", status)
 
+    def test_set_houses_only_false(self):
+        response = self._bot._dispatch_command("set", ["houses_only", "false"], "123", None)
+        self.assertIn("off", response)
+        filters = self._bot._store.get_chat_filters("123")
+        self.assertIs(filters.houses_only, False)
+
+    def test_set_houses_only_true(self):
+        response = self._bot._dispatch_command("set", ["houses_only", "true"], "123", None)
+        self.assertIn("on", response)
+        filters = self._bot._store.get_chat_filters("123")
+        self.assertIs(filters.houses_only, True)
+
+    def test_clear_houses_only(self):
+        self._bot._dispatch_command("set", ["houses_only", "false"], "123", None)
+        self._bot._dispatch_command("clear", ["houses_only"], "123", None)
+        filters = self._bot._store.get_chat_filters("123")
+        self.assertIsNone(filters.houses_only)
+
+    def test_clear_all_clears_houses_only(self):
+        self._bot._dispatch_command("set", ["houses_only", "false"], "123", None)
+        self._bot._dispatch_command("clear", ["all"], "123", None)
+        filters = self._bot._store.get_chat_filters("123")
+        self.assertIsNone(filters.houses_only)
+
+    def test_houses_only_false_clears_must_contain(self):
+        from zurich_house_hunter.service import apply_chat_filters_to_source
+        from zurich_house_hunter.models import ChatFilters, SourceConfig
+
+        source = SourceConfig(
+            name="s",
+            kind="generic_link_cards",
+            search_url="https://example.com",
+            must_contain_any=["haus", "villa", "chalet"],
+        )
+        filters = ChatFilters(chat_id="123", houses_only=False)
+        effective = apply_chat_filters_to_source(source, filters)
+        self.assertEqual(effective.must_contain_any, [])
+
+    def test_houses_only_false_with_include_terms(self):
+        from zurich_house_hunter.service import apply_chat_filters_to_source
+        from zurich_house_hunter.models import ChatFilters, SourceConfig
+
+        source = SourceConfig(
+            name="s",
+            kind="generic_link_cards",
+            search_url="https://example.com",
+            must_contain_any=["haus", "villa"],
+        )
+        filters = ChatFilters(chat_id="123", houses_only=False, include_terms=["wohnung"])
+        effective = apply_chat_filters_to_source(source, filters)
+        self.assertEqual(effective.must_contain_any, ["wohnung"])
+
+    def test_houses_only_none_preserves_source_terms(self):
+        from zurich_house_hunter.service import apply_chat_filters_to_source
+        from zurich_house_hunter.models import ChatFilters, SourceConfig
+
+        source = SourceConfig(
+            name="s",
+            kind="generic_link_cards",
+            search_url="https://example.com",
+            must_contain_any=["haus", "villa"],
+        )
+        filters = ChatFilters(chat_id="123")
+        effective = apply_chat_filters_to_source(source, filters)
+        self.assertEqual(effective.must_contain_any, ["haus", "villa"])
+
 
 if __name__ == "__main__":
     unittest.main()

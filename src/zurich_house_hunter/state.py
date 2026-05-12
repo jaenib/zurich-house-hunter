@@ -62,6 +62,7 @@ class SeenListingStore:
             include_terms=_string_list(payload.get("include_terms")),
             exclude_terms=_string_list(payload.get("exclude_terms")),
             radius_km=_optional_float(payload.get("radius_km")),
+            houses_only=_optional_bool(payload.get("houses_only")),
         )
 
     def save_chat_filters(self, filters: ChatFilters) -> None:
@@ -75,6 +76,7 @@ class SeenListingStore:
             "include_terms": filters.include_terms,
             "exclude_terms": filters.exclude_terms,
             "radius_km": filters.radius_km,
+            "houses_only": filters.houses_only,
         }
         self._connection.execute(
             """
@@ -327,3 +329,9 @@ def _string_list(value) -> list:
     if not value:
         return []
     return [str(item) for item in value]
+
+
+def _optional_bool(value) -> Optional[bool]:
+    if value is None:
+        return None
+    return bool(value)

@@ -10,6 +10,7 @@ class Anchor:
     href: str
     text: str
     title: str = ""
+    image_url: str = ""
 
 
 @dataclass
@@ -18,6 +19,7 @@ class Metadata:
     description: str = ""
     og_title: str = ""
     og_description: str = ""
+    og_image: str = ""
     canonical_url: str = ""
 
 
@@ -28,17 +30,27 @@ class AnchorCollector(HTMLParser):
         self._current_href: Optional[str] = None
         self._current_title: str = ""
         self._current_text_parts: List[str] = []
+        self._current_img_src: str = ""
 
     def handle_starttag(self, tag: str, attrs: List[tuple]) -> None:
-        if tag != "a":
-            return
-        attr_map = dict(attrs)
-        href = attr_map.get("href", "").strip()
-        if not href:
-            return
-        self._current_href = href
-        self._current_title = attr_map.get("title", "").strip()
-        self._current_text_parts = []
+        if tag == "a":
+            attr_map = dict(attrs)
+            href = attr_map.get("href", "").strip()
+            if not href:
+                return
+            self._current_href = href
+            self._current_title = attr_map.get("title", "").strip()
+            self._current_text_parts = []
+            self._current_img_src = ""
+        elif tag == "img" and self._current_href is not None and not self._current_img_src:
+            attr_map = dict(attrs)
+            src = attr_map.get("src", "").strip()
+            if src and not src.startswith("data:"):
+                self._current_img_src = src
+            else:
+                data_src = attr_map.get("data-src", "").strip()
+                if data_src and not data_src.startswith("data:"):
+                    self._current_img_src = data_src
 
     def handle_data(self, data: str) -> None:
         if self._current_href is not None:
@@ -48,10 +60,13 @@ class AnchorCollector(HTMLParser):
         if tag != "a" or self._current_href is None:
             return
         text = " ".join(part.strip() for part in self._current_text_parts if part.strip()).strip()
-        self.anchors.append(Anchor(href=self._current_href, text=text, title=self._current_title))
+        self.anchors.append(
+            Anchor(href=self._current_href, text=text, title=self._current_title, image_url=self._current_img_src)
+        )
         self._current_href = None
         self._current_title = ""
         self._current_text_parts = []
+        self._current_img_src = ""
 
 
 class MetadataCollector(HTMLParser):
@@ -77,6 +92,8 @@ class MetadataCollector(HTMLParser):
                 self.metadata.og_title = content
             if prop == "og:description" and content:
                 self.metadata.og_description = content
+            if prop == "og:image" and content:
+                self.metadata.og_image = content
             return
         if tag == "link":
             rel = attr_map.get("rel", "").lower().strip()
