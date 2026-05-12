@@ -110,7 +110,11 @@ class RadiusCommandIntegrationTests(unittest.TestCase):
 
     def test_zero_radius_rejected(self):
         response = self._bot._dispatch_command("set", ["radius", "0"], "123", None)
-        self.assertIn("greater than 0", response)
+        self.assertIn("between 0 and 100", response)
+
+    def test_oversized_radius_rejected(self):
+        response = self._bot._dispatch_command("set", ["radius", "200"], "123", None)
+        self.assertIn("between 0 and 100", response)
 
     def test_radius_overrides_source_postal_codes(self):
         from zurich_house_hunter.service import apply_chat_filters_to_source
@@ -163,7 +167,8 @@ class RadiusCommandIntegrationTests(unittest.TestCase):
 
     def test_clear_houses_only(self):
         self._bot._dispatch_command("set", ["houses_only", "false"], "123", None)
-        self._bot._dispatch_command("clear", ["houses_only"], "123", None)
+        response = self._bot._dispatch_command("clear", ["houses_only"], "123", None)
+        self.assertIn("override", response)
         filters = self._bot._store.get_chat_filters("123")
         self.assertIsNone(filters.houses_only)
 

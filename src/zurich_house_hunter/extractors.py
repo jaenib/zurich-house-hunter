@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Dict, List, Optional
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
@@ -87,28 +88,11 @@ class GenericLinkCardExtractor(BaseExtractor):
 
 class HomegateExtractor(GenericLinkCardExtractor):
     def extract(self, source: SourceConfig, html: str) -> List[Listing]:
-        effective_source = SourceConfig(
-            name=source.name,
-            kind=source.kind,
-            search_url=source.search_url,
-            enabled=source.enabled,
+        effective_source = replace(
+            source,
             url_prefix=source.url_prefix or "https://www.homegate.ch",
             item_url_regex=source.item_url_regex or r"^/(rent|buy)/\d+$",
-            exclude_url_regexes=source.exclude_url_regexes,
-            same_domain_only=source.same_domain_only,
             min_card_score=max(source.min_card_score, 2),
-            max_items=source.max_items,
-            fetch_details=source.fetch_details,
-            bootstrap_mark_seen=source.bootstrap_mark_seen,
-            must_contain_any=source.must_contain_any,
-            exclude_if_contains_any=source.exclude_if_contains_any,
-            allowed_postal_codes_any=source.allowed_postal_codes_any,
-            min_price_chf=source.min_price_chf,
-            max_price_chf=source.max_price_chf,
-            min_rooms=source.min_rooms,
-            max_rooms=source.max_rooms,
-            min_area_sqm=source.min_area_sqm,
-            max_area_sqm=source.max_area_sqm,
         )
         return super().extract(effective_source, html)
 

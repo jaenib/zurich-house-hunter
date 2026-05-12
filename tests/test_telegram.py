@@ -110,6 +110,71 @@ class TelegramTests(unittest.TestCase):
         self.assertEqual(http_client.calls[0]["payload"]["photo"], "https://cdn.example.com/img/listing1.jpg")
         self.assertIn("Open listing", http_client.calls[0]["payload"]["caption"])
 
+    def test_send_listing_falls_back_to_text_when_photo_fails(self):
+        class FailFirstHttpClient:
+            def __init__(self):
+                self.calls = []
+                self.call_count = 0
+
+            def post_form(self, url, payload, timeout_seconds=None):
+                self.calls.append({"url": url, "payload": dict(payload)})
+                self.call_count += 1
+                if self.call_count == 1:
+                    return {"ok": False, "description": "Bad Request: wrong file identifier"}
+                return {"ok": True, "result": {}}
+
+        http_client = FailFirstHttpClient()
+        notifier = TelegramNotifier(http_client, TelegramConfig(bot_token="token", chat_id="123"))
+        listing = Listing(
+            source_name="s",
+            url="https://example.com/1",
+            canonical_key="https://example.com/1",
+            raw_text="",
+            image_url="https://cdn.example.com/expired.jpg",
+        )
+
+        notifier.send_listing(listing)
+
+        self.assertEqual(len(http_client.calls), 2)
+        self.assertIn("sendPhoto", http_client.calls[0]["url"])
+        self.assertIn("sendMessage", http_client.calls[1]["url"])
+
+    def test_send_photo_truncates_caption_to_1024(self):
+        http_client = _DummyHttpClient()
+        notifier = TelegramNotifier(http_client, TelegramConfig(bot_token="token", chat_id="123"))
+        long_caption = "x" * 2000
+
+        notifier.send_photo("https://example.com/img.jpg", caption=long_caption)
+
+        sent_caption = http_client.calls[0]["payload"]["caption"]
+        self.assertEqual(len(sent_caption), 1024)
+
+
+class AnchorCollectorTests(unittest.TestCase):
+    def test_nested_anchor_keeps_outer(self):
+        from zurich_house_hunter.html_tools import extract_anchors
+
+        html = '<a href="/outer">text <a href="/inner">inner</a> more</a>'
+        anchors = extract_anchors(html)
+        hrefs = [a.href for a in anchors]
+        self.assertIn("/outer", hrefs)
+        self.assertNotIn("/inner", hrefs)
+
+    def test_anchor_captures_img_src(self):
+        from zurich_house_hunter.html_tools import extract_anchors
+
+        html = '<a href="/listing"><img src="/thumb.jpg"> Some text CHF 3000</a>'
+        anchors = extract_anchors(html)
+        self.assertEqual(len(anchors), 1)
+        self.assertEqual(anchors[0].image_url, "/thumb.jpg")
+
+    def test_anchor_ignores_data_uri_img(self):
+        from zurich_house_hunter.html_tools import extract_anchors
+
+        html = '<a href="/listing"><img src="data:image/gif;base64,R0lGOD"> text</a>'
+        anchors = extract_anchors(html)
+        self.assertEqual(anchors[0].image_url, "")
+
 
 if __name__ == "__main__":
     unittest.main()

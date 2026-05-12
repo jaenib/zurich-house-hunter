@@ -23,19 +23,22 @@ class TelegramNotifier:
     ) -> None:
         message = build_listing_message(listing)
         if listing.image_url:
-            self.send_photo(
-                listing.image_url,
-                caption=message,
-                chat_id=chat_id,
-                message_thread_id=message_thread_id,
-            )
-        else:
-            self.send_html(
-                message,
-                chat_id=chat_id,
-                message_thread_id=message_thread_id,
-                disable_web_page_preview=True,
-            )
+            try:
+                self.send_photo(
+                    listing.image_url,
+                    caption=message,
+                    chat_id=chat_id,
+                    message_thread_id=message_thread_id,
+                )
+                return
+            except RuntimeError:
+                pass
+        self.send_html(
+            message,
+            chat_id=chat_id,
+            message_thread_id=message_thread_id,
+            disable_web_page_preview=True,
+        )
 
     def send_photo(
         self,
@@ -57,7 +60,7 @@ class TelegramNotifier:
         payload: Dict[str, str] = {
             "chat_id": effective_chat_id,
             "photo": photo_url,
-            "caption": caption,
+            "caption": caption[:1024],
             "parse_mode": "HTML",
         }
         effective_thread_id = message_thread_id

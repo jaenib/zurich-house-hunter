@@ -239,8 +239,8 @@ class GroupChatBot:
         except ValueError:
             return "Filter values must be numeric."
         if field_key == "radius":
-            if value <= 0:
-                return "Radius must be greater than 0."
+            if value <= 0 or value > 100:
+                return "Radius must be between 0 and 100 km."
             filters.radius_km = value
             self._store.save_chat_filters(filters)
             codes = postal_codes_within_radius(value)
@@ -296,7 +296,7 @@ class GroupChatBot:
         if field_key == "houses_only":
             filters.houses_only = None
             self._store.save_chat_filters(filters)
-            return "Cleared houses_only (using source default)."
+            return "Cleared houses_only override."
         field_name = NUMERIC_FILTER_FIELDS.get(field_key)
         if field_name is None:
             return "Unknown field to clear. Use /help."
