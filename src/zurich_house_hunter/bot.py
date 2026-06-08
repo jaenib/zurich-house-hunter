@@ -12,6 +12,8 @@ from .state import SeenListingStore
 from .telegram import TelegramNotifier
 
 UPDATE_OFFSET_KEY = "telegram_last_update_id"
+DEPLOY_VERSION_KEY = "last_deploy_version"
+DEPLOY_VERSION = "v1.1-error-dm-only"
 
 NUMERIC_FILTER_FIELDS = {
     "min_price": "min_price_chf",
@@ -56,6 +58,7 @@ class GroupChatBot:
                 len(self._store.list_active_chat_targets())
             ),
         )
+        self._send_startup_notifications()
 
         while True:
             now = time.time()
@@ -93,6 +96,7 @@ class GroupChatBot:
             log_event("bot", "no active chat targets registered yet; waiting for DM, group command, or add event")
             return
         log_event("bot", "starting scheduled scrape for {0} active chat target(s)".format(len(targets)))
+        all_errors: List[str] = []
         for target in targets:
             filters = self._store.get_chat_filters(target.chat_id)
             stats = self._service.run_once(
@@ -101,7 +105,7 @@ class GroupChatBot:
                 destination_chat_id=target.chat_id,
                 destination_thread_id=target.default_message_thread_id,
             )
-            errors = [error for item in stats for error in item.errors]
+            errors = [err for item in stats for err in item.errors]
             log_event(
                 "bot",
                 "target {0}: {1}".format(
@@ -109,11 +113,15 @@ class GroupChatBot:
                     build_run_summary(stats).replace("\n", " | "),
                 ),
             )
-            if errors and not self._dry_run:
+            for err in errors:
+                if err not in all_errors:
+                    all_errors.append(err)
+        if all_errors and not self._dry_run:
+            for dm_target in [t for t in targets if t.chat_type == "private"]:
                 self._telegram.send_text(
-                    "Scrape run finished with errors:\n- " + "\n- ".join(errors[:5]),
-                    chat_id=target.chat_id,
-                    message_thread_id=target.default_message_thread_id,
+                    "Scrape run finished with errors:\n- " + "\n- ".join(all_errors[:5]),
+                    chat_id=dm_target.chat_id,
+                    message_thread_id=dm_target.default_message_thread_id,
                 )
 
     def _handle_update(self, update: Dict[str, object]) -> None:
@@ -356,6 +364,27 @@ class GroupChatBot:
 
     def _save_next_update_offset(self, offset: int) -> None:
         self._store.set_bot_value(UPDATE_OFFSET_KEY, str(offset))
+
+    def _send_startup_notifications(self) -> None:
+        if self._store.get_bot_value(DEPLOY_VERSION_KEY) == DEPLOY_VERSION:
+            return
+        targets = self._store.list_active_chat_targets()
+        self._store.set_bot_value(DEPLOY_VERSION_KEY, DEPLOY_VERSION)
+        if not targets or self._dry_run:
+            return
+        for target in targets:
+            if target.chat_type == "private":
+                self._telegram.send_text(
+                    "Update deployed: fixed the alle-immobilien.ch search URL and error reports now go to DM only.",
+                    chat_id=target.chat_id,
+                    message_thread_id=target.default_message_thread_id,
+                )
+            elif target.chat_type in {"group", "supergroup"}:
+                self._telegram.send_text(
+                    "Sorry for the earlier scrape error message. I've been updated and am working correctly again.",
+                    chat_id=target.chat_id,
+                    message_thread_id=target.default_message_thread_id,
+                )
 
     def _emit_runtime_warning(self, message: str) -> None:
         log_event("bot", message)
